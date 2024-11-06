@@ -1,0 +1,183 @@
+.eqv num $t1
+.eqv resto $t2
+.eqv char  $t3
+.eqv index_buf $t4
+.eqv index_num $t5
+.eqv quociente $t6
+.eqv index_lista $t7
+.eqv endereco $t8
+.eqv flag_sign $s0
+.eqv tam 400
+
+.data
+    filenameInput: .asciiz "lista.txt"
+    filenameOutput: .asciiz "lista_ordenada.txt"
+    inputBuffer: .space 1024     # armazena lista.txt
+    .align 2
+    numeroArray: .space 500       # Vetor composto pelos números da lista
+    size: .word 99		# Armazena tamanho do vetor para Bubble Sort (numero de digitos em numeroArray menos 1)
+    buffer: .space 20  
+    lista_char: .space 1024
+
+.text 
+
+main:
+    # Inicializa Variáveis
+    li      $t1, 0                # Inicializa índice para inputBuffer
+    li      $t2, 0                # Acumulador para número em construção
+    li      $t3, 10               # Multiplicador para construção do número
+    la      $t4, numeroArray      # Endereço de memoria inicial do vetor de saída
+    li      $t5, 0                # �?ndice do vetor numeroArray
+    li      $t9, 1                # Flag para sinal negativo, inicializa como positivo
+
+    # Abrir arquivo
+    li      $v0, 13
+    la      $a0, filenameInput
+    li      $a1, 0                 # readonly
+    li      $a2, 0
+    syscall
+    move    $s0, $v0               # Guarda filedescriptor em $s0
+
+    # Ler arquivo
+    li      $v0, 14
+    move    $a0, $s0
+    la      $a1, inputBuffer
+    li      $a2, 1024               # tamanho da "String"
+    syscall
+
+    # Separar dígitos de inputBuffer em posições de vetor de numeroArray
+separarNumero:
+    lb      $t0, inputBuffer($t1)    # Carrega digito n de inputBuffer
+    beq     $t0, 45, negativo        # Se o dígito for "-"
+    beq     $t0, 44, armazenaNumero  # Se for vírgula, armazena número atual
+    beq     $t0, 0, armazenaFinal    # Se for NULL (final), armazena e termina
+
+    # Se for um dígito, converte para inteiro
+    sub     $t0, $t0, 48            # Converte ASCII para inteiro (0-9)
+    mul     $t2, $t2, $t3            # Multiplica número acumulado por 10
+    add     $t2, $t2, $t0            # Adiciona o dígito ao número acumulado
+
+    addi    $t1, $t1, 1              # Avança para o próximo caractere
+    j       separarNumero             # Repete o loop
+
+negativo:
+    li      $t9, -1                  # Muda a "flag" para -1
+    addi    $t1, $t1, 1              # Avança o dígito do inputBuffer
+    j       separarNumero             # Volta ao loop
+
+armazenaNumero:
+    mul     $t2, $t2, $t9            # Multiplica o valor do num pela flag
+    sw      $t2, 0($t4)              # Armazena o número na posição atual de numeroArray
+    addi    $t4, $t4, 4               # Muda o endereço de memória para a próxima palavra do vetor
+    li      $t2, 0                   # Reseta acumulador para próximo número
+    li      $t9, 1                   # Reseta a flag para positivo
+    addi    $t1, $t1, 1              # Avança para o próximo caractere (após vírgula)
+    j       separarNumero             # Continua a leitura
+
+armazenaFinal:
+    mul     $t2, $t2, $t9            # Multiplica o número final pela flag
+    sw      $t2, 0($t4)              # Armazena o último número na posição atual de numeroArray
+    
+   # Bubble Sort
+la      $t4, numeroArray          # Ponteiro para o início do vetor
+lw      $t5, size                 # Tamanho do vetor
+
+bubble_sort:
+    li      $t6, 0                    # Flag para indicar se houve troca
+    li      $t7, 0                    # Contador de iterações
+
+outer_loop:
+    bge     $t7, $t5, end_sort        # Se $t7 >= tamanho, termina
+    li      $t6, 0                    # Reinicia a flag de troca para cada iteração externa
+    la      $t4, numeroArray          # Reinicia o ponteiro do vetor para o início
+    li      $t8, 0                    # Reinicia o contador interno para comparações
+
+inner_loop:
+    lw      $t0, 0($t4)               # Carrega o elemento atual
+    lw      $t1, 4($t4)               # Carrega o próximo elemento
+    blt     $t0, $t1, no_swap         # Se t0 < t1, não troca
+	
+    # Troca os elementos
+    sw      $t1, 0($t4)               # Armazena t1 na posição atual
+    sw      $t0, 4($t4)               # Armazena t0 na próxima posição
+    li      $t6, 1                    # Indica que houve troca
+
+no_swap:
+    addi    $t4, $t4, 4               # Avança para o próximo elemento
+    addi    $t8, $t8, 1                # Incrementa o contador interno
+    blt     $t8, $t5, inner_loop       # Se ainda há elementos para comparar, continua
+
+    addi    $t7, $t7, 1                # Incrementa o contador externo
+    bne     $t6, 0, outer_loop         # Se houve troca, continua o loop externo
+
+end_sort:
+            #1 - Dividir o n�mero por 10 enquanto o quociente for dif de 0
+li       index_lista, 0
+li       index_num, 0
+
+restart:
+li       flag_sign, 0
+li       index_buf, 0
+
+teste_sinal:
+beq      index_num, tam, escrita
+lw       num, numeroArray(index_num)
+add      index_num, index_num, 4
+bge      num, $zero, converte
+li       flag_sign, 1
+li       $t0, -1
+mul      num, num, $t0
+
+
+converte:
+move      quociente, num
+
+proximo:
+li        $t0, 10
+div       quociente, $t0            # divide por 10
+mfhi      resto
+mflo      quociente
+add       char, resto, 0x30
+sb        char, buffer(index_buf)
+add       index_buf, index_buf, 1
+bnez      quociente, proximo
+beqz      flag_sign, ordena_digitos  # se � positivo
+li        $t0, '-'
+sb $t0, buffer (index_buf)
+add index_buf, index_buf, 1
+
+ordena_digitos:
+
+beqz index_buf, sai
+add index_buf, index_buf, -1 #decrementa �ndice do buffer
+lb char, buffer (index_buf)
+sb char, lista_char(index_lista)
+add index_lista, index_lista, 1
+ j    ordena_digitos
+
+sai:
+lw	$s7, numeroArray(index_num)
+beq	$s7, 0, escrita
+
+li      $t0, ','
+sb $t0, lista_char(index_lista)
+add  index_lista, index_lista,  1
+
+j  restart
+escrita:
+li       $v0,     13
+la       $a0,  filenameOutput
+li       $a1,   1
+li       $a2,   0
+syscall
+read:  move    $s7, $v0
+       li      $v0, 15 
+       move    $a0, $s7
+       la      $a1, lista_char
+       li      $a2, 1023     #caractere por caractere
+       syscall
+
+close: li     $v0, 16
+      move  $a0, $s7
+fim:  li       $v0, 10
+	syscall
